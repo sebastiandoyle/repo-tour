@@ -141,7 +141,7 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
       var source = ctx.createMediaStreamSource(stream);
       var analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.3;
+      analyser.smoothingTimeConstant = 0.25;
       source.connect(analyser);
       var dataArray = new Uint8Array(analyser.frequencyBinCount);
       var voiceFrames = 0;
@@ -150,13 +150,13 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
         var sum = 0;
         for (var i = 0; i < dataArray.length; i++) sum += dataArray[i];
         var avg = sum / dataArray.length;
-        if (avg > 15) {
+        if (avg > 18) {
           voiceFrames++;
-          if (voiceFrames >= 3) onVoiceDetected();
+          if (voiceFrames >= 2) onVoiceDetected();
         } else {
           voiceFrames = 0;
         }
-      }, 80);
+      }, 50);
       _activeVAD = { stream: stream, ctx: ctx, timer: timer };
       return _activeVAD;
     }).catch(function (e) {
@@ -232,7 +232,7 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
           silenceTimer = setTimeout(function () {
             cleanup();
             resolve(transcript.trim() || '[no response]');
-          }, 2500);
+          }, 1500);
         }
       };
       recognition.onerror = function (event) {
@@ -249,7 +249,7 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
               cleanup();
               resolve(transcript || '[no response]');
             }
-          }, 100);
+          }, 50);
         }
       };
       startVAD(bargeIn);
@@ -272,7 +272,7 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
             silenceTimer = setTimeout(function () {
               cleanup();
               resolve(transcript.trim() || '[no response]');
-            }, 8000);
+            }, 5000);
           }
         };
         utterance.onerror = function () {
@@ -465,10 +465,10 @@ Run this with `puppeteer_evaluate`. This is the FULL engine — copy it exactly:
     getCodeText: getCodeText,
     getReadme: getReadme,
     getRepoDescription: getRepoDescription,
-    version: '1.0.0'
+    version: '1.1.0'
   };
 
-  console.log('[RepoTour] Engine v1.0.0 loaded');
+  console.log('[RepoTour] Engine v1.1.0 loaded');
 })();
 ```
 
@@ -583,7 +583,7 @@ These are proven fixes from production code. Do not skip them:
 
 - **Cancel-bug**: The engine already has the 80ms delay between `cancel()` and `speak()`. Do not add extra delays.
 - **Pause-bug**: The engine has the 5s keep-alive timer. Long narrations work fine.
-- **VAD threshold**: avg>15 across 3 frames (240ms) avoids false positives from ambient noise.
+- **VAD threshold**: avg>18 across 2 frames at 50ms (~100ms detection). Balances speed with false-positive resistance.
 - **Echo cancellation**: The mic stream uses `echoCancellation: true` so the mic hears the user, not the TTS playing through speakers.
 - **STT during TTS**: Chrome fires `no-speech` errors while TTS plays. The engine ignores them. Don't treat these as failures.
 - **Page navigation kills JS**: This is the biggest gotcha. ALWAYS re-inject after navigation.

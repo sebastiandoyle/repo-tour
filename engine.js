@@ -1,5 +1,6 @@
 // Repo Tour — Voice + Animation Engine for GitHub walkthroughs
 // Injected into Chrome via Puppeteer MCP. All functions on window.__rt.
+// v1.1.0 — Fast barge-in: 100ms detection, 1.5s silence timer
 
 (function () {
   'use strict';
@@ -132,6 +133,7 @@
 
   // ---------------------------------------------------------------------------
   // VAD — voice activity detection via AudioContext (echo-cancelled)
+  // Fast mode: 50ms polling, 2-frame threshold (~100ms detection)
   // ---------------------------------------------------------------------------
 
   function startVAD(onVoiceDetected) {
@@ -142,7 +144,7 @@
       var source = ctx.createMediaStreamSource(stream);
       var analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.3;
+      analyser.smoothingTimeConstant = 0.25;
       source.connect(analyser);
       var dataArray = new Uint8Array(analyser.frequencyBinCount);
       var voiceFrames = 0;
@@ -152,13 +154,13 @@
         var sum = 0;
         for (var i = 0; i < dataArray.length; i++) sum += dataArray[i];
         var avg = sum / dataArray.length;
-        if (avg > 15) {
+        if (avg > 18) {
           voiceFrames++;
-          if (voiceFrames >= 3) onVoiceDetected(); // ~240ms sustained
+          if (voiceFrames >= 2) onVoiceDetected(); // ~100ms sustained
         } else {
           voiceFrames = 0;
         }
-      }, 80);
+      }, 50);
 
       _activeVAD = { stream: stream, ctx: ctx, timer: timer };
       return _activeVAD;
@@ -180,6 +182,7 @@
   // ---------------------------------------------------------------------------
   // Speak + Listen with barge-in
   // Dual detectors: AudioContext VAD + STT interim results
+  // Fast mode: 1.5s post-barge silence, 50ms STT restart, 5s post-speech wait
   // ---------------------------------------------------------------------------
 
   function speakAndListen(text, timeoutMs) {
@@ -248,7 +251,7 @@
           silenceTimer = setTimeout(function () {
             cleanup();
             resolve(transcript.trim() || '[no response]');
-          }, 2500);
+          }, 1500);
         }
       };
 
@@ -267,7 +270,7 @@
               cleanup();
               resolve(transcript || '[no response]');
             }
-          }, 100);
+          }, 50);
         }
       };
 
@@ -294,7 +297,7 @@
             silenceTimer = setTimeout(function () {
               cleanup();
               resolve(transcript.trim() || '[no response]');
-            }, 8000);
+            }, 5000);
           }
         };
         utterance.onerror = function () {
@@ -383,13 +386,11 @@
     clear();
     injectStyles();
     for (var i = start; i <= end; i++) {
-      // GitHub uses id="LC1", "LC2", etc. for code lines
       var line = document.getElementById('LC' + i);
       if (line) {
         line.classList.add('__rt_line_spot');
         if (i === start) line.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-      // Also try the React code view (data-line-number attribute)
       var reactLine = document.querySelector('[data-line-number="' + i + '"]');
       if (reactLine) {
         var codeLine = reactLine.closest('tr') || reactLine.parentElement;
@@ -436,10 +437,8 @@
   // PAGE INSPECTION — extract info from current GitHub page
   // ---------------------------------------------------------------------------
 
-  // Get list of files/folders visible in the repo directory
   function getFiles() {
     var files = [];
-    // Classic GitHub layout
     var rows = document.querySelectorAll('div[role="row"].Box-row, tr.react-directory-row');
     rows.forEach(function (row) {
       var link = row.querySelector('a');
@@ -447,10 +446,9 @@
       var name = link.textContent.trim();
       var isDir = !!row.querySelector('svg[aria-label="Directory"]') ||
                   !!row.querySelector('[class*="directory"]') ||
-                  link.getAttribute('href')?.includes('/tree/');
+                  (link.getAttribute('href') || '').includes('/tree/');
       files.push({ name: name, type: isDir ? 'dir' : 'file' });
     });
-    // React file explorer fallback
     if (files.length === 0) {
       var links = document.querySelectorAll('a.Link--primary');
       links.forEach(function (link) {
@@ -466,7 +464,6 @@
     return files;
   }
 
-  // Determine what kind of GitHub page we're on
   function getPageType() {
     var url = window.location.pathname;
     if (url.match(/\/blob\//)) return 'file';
@@ -476,32 +473,25 @@
     return 'other';
   }
 
-  // Extract visible code content from a file view
   function getCodeText() {
-    // Try the code table
     var codeTable = document.querySelector('table.highlight, table.js-file-line-container');
     if (codeTable) return codeTable.textContent;
-    // Try React code view
     var codeLines = document.querySelectorAll('[data-line-number] + td, .react-code-text');
     if (codeLines.length > 0) {
       return Array.from(codeLines).map(function (el) { return el.textContent; }).join('\n');
     }
-    // Try the blob wrapper
     var blob = document.querySelector('.blob-wrapper, .react-blob-print-hide');
     if (blob) return blob.textContent;
-    // Try readme
     var readme = document.querySelector('#readme article, .markdown-body');
     if (readme) return readme.textContent;
     return '';
   }
 
-  // Get README content specifically
   function getReadme() {
     var readme = document.querySelector('#readme article, .markdown-body');
     return readme ? readme.textContent : '';
   }
 
-  // Get repo description from the About section
   function getRepoDescription() {
     var about = document.querySelector('.f4.my-3, .BorderGrid-cell p.f4');
     return about ? about.textContent.trim() : '';
@@ -533,8 +523,8 @@
     getRepoDescription: getRepoDescription,
 
     // Version
-    version: '1.0.0'
+    version: '1.1.0'
   };
 
-  console.log('[RepoTour] Engine v1.0.0 loaded');
+  console.log('[RepoTour] Engine v1.1.0 loaded');
 })();
